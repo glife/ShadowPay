@@ -1,0 +1,241 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum JobStatus {
+  open
+  bidding
+  in_progress
+  delivered
+  completed
+  disputed
+}
+
+enum BidStatus {
+  pending
+  accepted
+  rejected
+}
+
+enum OfferType {
+  offer
+  counter
+  accept
+}
+
+enum TransactionType {
+  escrow_lock
+  escrow_release
+}
+
+enum BlueprintStatus {
+  generated
+  archived
+}
+
+model Agent {
+  id                String             @id @default(uuid()) @db.Uuid
+  walletAddress     String             @unique @map("wallet_address") @db.VarChar(42)
+  ensName           String?            @map("ens_name") @db.VarChar(255)
+  name              String?            @db.VarChar(255)
+  capabilities      String[]
+  minPrice          Decimal?           @map("min_price") @db.Decimal(18, 6)
+  maxPrice          Decimal?           @map("max_price") @db.Decimal(18, 6)
+  reputationScore   Decimal            @default(0) @map("reputation_score") @db.Decimal(5, 2)
+  isActive          Boolean            @default(true) @map("is_active")
+  createdAt         DateTime           @default(now()) @map("created_at")
+
+  postedJobs                  Job[]                 @relation("PosterJobs")
+  hiredJobs                   Job[]                 @relation("HiredJobs")
+  bids                        Bid[]
+  sentOffers                  NegotiationOffer[]    @relation("OfferSender")
+  receivedOffers              NegotiationOffer[]    @relation("OfferReceiver")
+  outgoingTransactions        Transaction[]         @relation("TxFrom")
+  incomingTransactions        Transaction[]         @relation("TxTo")
+  reputationEvents            ReputationEvent[]
+  uploadedDeliverables        JobDeliverable[]
+  createdBlueprints           CouncilBlueprint[]
+  blueprintAccessGrantedToMe  BlueprintAccessGrant[] @relation("BlueprintGrantTarget")
+  blueprintAccessGrantedByMe  BlueprintAccessGrant[] @relation("BlueprintGrantGranter")
+
+  @@index([capabilities], type: Gin, map: "idx_agents_capabilities")
+  @@map("agents")
+}
+
+model Job {
+  id                  String    @id @default(uuid()) @db.Uuid
+  posterId            String?   @map("poster_id") @db.Uuid
+  hiredAgentId        String?   @map("hired_agent_id") @db.Uuid
+  title               String
+  description         String?
+  budgetMin           Decimal?  @map("budget_min") @db.Decimal(18, 6)
+  budgetMax           Decimal?  @map("budget_max") @db.Decimal(18, 6)
+  status              JobStatus @default(open)
+  deliverable         String?
+  parentJobId         String?   @map("parent_job_id") @db.Uuid
+  createdAt           DateTime  @default(now()) @map("created_at")
+  blueprintId         String?   @map("blueprint_id") @db.Uuid
+  blueprintRef        String?   @map("blueprint_ref")
+  blueprintHash       String?   @map("blueprint_hash") @db.VarChar(128)
+  blueprintAttachedAt DateTime? @map("blueprint_attached_at")
+
+  poster            Agent?             @relation("PosterJobs", fields: [posterId], references: [id])
+  hiredAgent        Agent?             @relation("HiredJobs", fields: [hiredAgentId], references: [id])
+  blueprint         CouncilBlueprint?  @relation(fields: [blueprintId], references: [id])
+  parentJob         Job?               @relation("JobHierarchy", fields: [parentJobId], references: [id])
+  childJobs         Job[]              @relation("JobHierarchy")
+  bids              Bid[]
+  negotiationOffers NegotiationOffer[]
+  transactions      Transaction[]
+  reputationEvents  ReputationEvent[]
+  deliverables      JobDeliverable[]
+
+  @@index([status], map: "idx_jobs_status")
+  @@index([posterId], map: "idx_jobs_poster")
+  @@index([blueprintId], map: "idx_jobs_blueprint_id")
+  @@index([blueprintHash], map: "idx_jobs_blueprint_hash")
+  @@map("jobs")
+}
+
+model Bid {
+  id         String    @id @default(uuid()) @db.Uuid
+  jobId      String    @map("job_id") @db.Uuid
+  agentId    String    @map("agent_id") @db.Uuid
+  amount     Decimal   @db.Decimal(18, 6)
+  proposal   String?
+  status     BidStatus @default(pending)
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  job   Job   @relation(fields: [jobId], references: [id])
+  agent Agent @relation(fields: [agentId], references: [id])
+
+  @@index([jobId], map: "idx_bids_job")
+  @@map("bids")
+}
+
+model NegotiationOffer {
+  id         String    @id @default(uuid()) @db.Uuid
+  jobId      String    @map("job_id") @db.Uuid
+  senderId   String    @map("sender_id") @db.Uuid
+  receiverId String    @map("receiver_id") @db.Uuid
+  amount     Decimal   @db.Decimal(18, 6)
+  type       OfferType
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  job      Job   @relation(fields: [jobId], references: [id])
+  sender   Agent @relation("OfferSender", fields: [senderId], references: [id])
+  receiver Agent @relation("OfferReceiver", fields: [receiverId], references: [id])
+
+  @@map("negotiation_offers")
+}
+
+model Transaction {
+  id          String          @id @default(uuid()) @db.Uuid
+  fromAgentId String?         @map("from_agent_id") @db.Uuid
+  toAgentId   String?         @map("to_agent_id") @db.Uuid
+  jobId       String?         @map("job_id") @db.Uuid
+  amount      Decimal         @db.Decimal(18, 6)
+  type        TransactionType
+  txHash      String?         @map("tx_hash") @db.VarChar(66)
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  fromAgent Agent? @relation("TxFrom", fields: [fromAgentId], references: [id])
+  toAgent   Agent? @relation("TxTo", fields: [toAgentId], references: [id])
+  job       Job?   @relation(fields: [jobId], references: [id])
+
+  @@map("transactions")
+}
+
+model ReputationEvent {
+  id         String   @id @default(uuid()) @db.Uuid
+  agentId    String?  @map("agent_id") @db.Uuid
+  jobId      String?  @map("job_id") @db.Uuid
+  scoreDelta Decimal  @map("score_delta") @db.Decimal(5, 2)
+  reason     String?
+  txHash     String?  @map("tx_hash") @db.VarChar(66)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  agent Agent? @relation(fields: [agentId], references: [id])
+  job   Job?   @relation(fields: [jobId], references: [id])
+
+  @@index([agentId], map: "idx_reputation_agent")
+  @@map("reputation_events")
+}
+
+model JobDeliverable {
+  id             String   @id @default(uuid()) @db.Uuid
+  jobId          String   @map("job_id") @db.Uuid
+  uploaderId     String   @map("uploader_id") @db.Uuid
+  fileverseDocId String   @map("fileverse_doc_id") @db.VarChar(255)
+  contentHash    String   @map("content_hash") @db.VarChar(128)
+  storageRef     String   @map("storage_ref")
+  mimeType       String   @map("mime_type") @db.VarChar(255)
+  filename       String   @db.VarChar(255)
+  byteSize       Int      @map("byte_size")
+  version        Int
+  idempotencyKey String?  @map("idempotency_key") @db.VarChar(128)
+  isFinal        Boolean  @default(false) @map("is_final")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  job      Job   @relation(fields: [jobId], references: [id])
+  uploader Agent @relation(fields: [uploaderId], references: [id])
+
+  @@unique([jobId, version], map: "uq_job_deliverable_version")
+  @@unique([jobId, contentHash], map: "uq_job_deliverable_hash")
+  @@unique([jobId, idempotencyKey], map: "uq_job_deliverable_idempotency")
+  @@index([fileverseDocId], map: "idx_deliverable_doc_id")
+  @@index([contentHash], map: "idx_deliverable_hash")
+  @@map("job_deliverables")
+}
+
+model CouncilBlueprint {
+  id               String          @id @default(uuid()) @db.Uuid
+  requestId        String          @unique @map("request_id") @db.VarChar(128)
+  createdByAgentId String?         @map("created_by_agent_id") @db.Uuid
+  title            String?         @db.VarChar(255)
+  markdown         String
+  inputJson        Json?           @map("input_json")
+  fileverseDocId   String          @map("fileverse_doc_id") @db.VarChar(255)
+  storageRef       String          @map("storage_ref")
+  contentHash      String          @map("content_hash") @db.VarChar(128)
+  idempotencyKey   String?         @map("idempotency_key") @db.VarChar(128)
+  status           BlueprintStatus @default(generated)
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  createdBy   Agent?                @relation(fields: [createdByAgentId], references: [id])
+  jobs        Job[]
+  accessGrants BlueprintAccessGrant[]
+
+  @@unique([requestId, idempotencyKey], map: "uq_blueprint_request_idempotency")
+  @@index([createdByAgentId], map: "idx_blueprint_creator")
+  @@index([contentHash], map: "idx_blueprint_hash")
+  @@map("council_blueprints")
+}
+
+model BlueprintAccessGrant {
+  id                  String   @id @default(uuid()) @db.Uuid
+  blueprintId         String   @map("blueprint_id") @db.Uuid
+  agentId             String   @map("agent_id") @db.Uuid
+  grantedByAgentId    String   @map("granted_by_agent_id") @db.Uuid
+  encryptedKeyForAgent String  @map("encrypted_key_for_agent")
+  grantedAt           DateTime @default(now()) @map("granted_at")
+  revokedAt           DateTime? @map("revoked_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  blueprint  CouncilBlueprint @relation(fields: [blueprintId], references: [id])
+  agent      Agent            @relation("BlueprintGrantTarget", fields: [agentId], references: [id])
+  grantedBy  Agent            @relation("BlueprintGrantGranter", fields: [grantedByAgentId], references: [id])
+
+  @@unique([blueprintId, agentId], map: "uq_blueprint_access_target")
+  @@index([blueprintId], map: "idx_blueprint_access_blueprint")
+  @@index([agentId], map: "idx_blueprint_access_agent")
+  @@index([revokedAt], map: "idx_blueprint_access_revoked")
+  @@map("blueprint_access_grants")
+}

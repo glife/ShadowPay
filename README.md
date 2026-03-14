@@ -1,324 +1,121 @@
 # ShadowPay
 
-**Hey Elsa & The AI Council — On-Chain Agent Marketplace**
-
-A decentralized smart contract system that connects AI-generated strategic blueprints with a permissionless marketplace of provider agents. Users express natural language intent → an AI Council produces a strategic blueprint → an on-chain orchestrator posts the task → an evaluation engine selects the best provider → execution completes on-chain (CRYPTO) or off-chain via oracle verification (WEB2).
-
----
-
-## Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│  Tier 1  │  User submits natural language intent                 │
-├──────────┼───────────────────────────────────────────────────────┤
-│  Tier 2  │  AI Council produces Strategic Blueprint (JSON)       │
-├──────────┼───────────────────────────────────────────────────────┤
-│  Tier 3  │  ElsaOrchestrator — secure middleware broker          │
-│          │  Validates, decodes, and forwards blueprints on-chain │
-├──────────┼───────────────────────────────────────────────────────┤
-│  Tier 4  │  AgentMarketplace — evaluation engine & task hub      │
-│          │  AgentRegistry    — provider agent registry           │
-│          │  ReputationEngine — EMA-based dynamic scoring         │
-│          │  TaskEscrow       — ETH payment escrow vault          │
-├──────────┼───────────────────────────────────────────────────────┤
-│  Tier 5  │  Web2Oracle — off-chain proof verification bridge     │
-│          │  Provider Agents — execute CRYPTO / WEB2 tasks        │
-└──────────┴───────────────────────────────────────────────────────┘
-```
-
----
-
-## Smart Contracts (Implemented & Tested ✅)
-
-All 6 contracts compiled and verified with **130 passing tests**.
-
-### 1. AgentRegistry
-
-> Permissionless registry where third-party developers register their AI execution agents.
-
-- **Register agents** with name, type, category (CRYPTO/WEB2), cost, and speed
-- **`registerAgentFor()`** — marketplace gateway that correctly forwards the developer's wallet as agent owner
-- **Activate / deactivate** agents without losing reputation history
-- **Update pricing** — owners can adjust `costPerTask` in real-time
-- **Rolling speed updates** — `updateSpeed()` called by marketplace after each task completion
-- **Query helpers** — `getActiveAgentsByType()`, `getAgentsByOwner()`, `isAgentActive()`
-
-### 2. ReputationEngine
-
-> On-chain dynamic reputation scoring using Exponential Moving Average (EMA).
-
-- **Score scale**: 0–1000 → ★0.00 – ★5.00 (divide by 200)
-- **Neutral start**: every new agent begins at 500 (★2.50)
-- **EMA formula** (α = 20%):
-  - Success: `newScore = 0.20 × 1000 + 0.80 × oldScore`
-  - Failure: `newScore = 0.80 × oldScore`
-- **Asymmetric design**: success pulls harder than failure — protects against transient infra issues
-- **Simulation helpers**: `simulateSuccess()` / `simulateFailure()` — read-only projected scores
-- **Metrics**: success rate (bps), average response time, task counters
+A modular Next.js backend for an agent marketplace with Neon Postgres + Prisma, SIWE auth, and Fileverse-based sovereign data flows.
+
+## Current Status (Backend)
 
-### 3. TaskEscrow
+- Framework: Next.js App Router (`backend/src/app/api`)
+- Database: Neon Postgres + Prisma
+- Auth: SIWE + JWT
+- Core modules implemented:
+  - Agents
+  - Jobs + strict state machine
+  - Bids + transactional accept flow
+  - Negotiation offers
+  - Payments/reputation (DB-side flow)
+  - SSE event broadcasting
 
-> Secure ETH payment vault with a strict one-way state machine.
+## Fileverse Integration (Completed)
 
-```
-         lockFunds()
-         ┌─────────┐
-         │  LOCKED  │
-         └────┬─────┘
-    ┌─────────┴──────────┐
-releaseFunds()       refundFunds()
-    │                    │
-┌───▼─────┐        ┌────▼──────┐
-│RELEASED │        │ REFUNDED  │
-└─────────┘        └───────────┘
-```
-
-- **Lock** — holds ETH at task creation
-- **Release** — pays provider agent owner on successful completion
-- **Refund** — returns funds to depositor on failure/cancellation
-- **ReentrancyGuard** + Checks-Effects-Interactions on all ETH transfers
-- Rejects direct ETH sends (must go through `lockFunds()`)
-
-### 4. AgentMarketplace
-
-> The core Smart Contract Hub with a built-in Evaluation Engine.
-
-**Evaluation Engine** — weighted composite scoring (0–1000):
-
-| Factor     | Weight | Formula                            |
-|------------|--------|------------------------------------|
-| Reputation | 50%    | `repScore × 1`                     |
-| Cost       | 30%    | `(1 − cost/maxBudget) × 300`       |
-| Speed      | 20%    | `(1 − speed/MAX_SPEED) × 200`      |
-
-**Task lifecycle**:
-- `postTask()` — creates task + auto-selects best agent (OPEN → ASSIGNED)
-- `completeTask()` — verifies caller ownership, updates reputation, releases escrow
-- `failTask()` — records failure, refunds escrow (supports agent owner, admin, and oracle callers)
-- `cancelTask()` — OPEN tasks only, full refund
-- `queryProviders()` — public scoring preview for any task type
-
-**Agent registration gateway**:
-- `registerProviderAgent()` — calls `registerAgentFor(msg.sender, ...)` to correctly forward the developer's address as agent owner
-
-**Access control roles**: `ELSA_ROLE` (orchestrator), `ORACLE_ROLE` (Web2Oracle), `DEFAULT_ADMIN_ROLE`
-
-### 5. Web2Oracle
-
-> Bridge between off-chain task execution and the on-chain reputation economy.
-
-**Proof lifecycle**:
-```
-(no proof) → submitProof() → SUBMITTED → verifyAndReport() → VERIFIED
-                                       → rejectProof()     → REJECTED
-```
-
-- **Proof integrity**: on-chain `keccak256` recomputation ensures declared hash matches supplied bytes
-- **TLSNotary support**: raw proof bytes emitted in `ProofDataAnchored` event for off-chain auditors
-- **Oracle feedback loop**:
-  1. Agent executes off-chain task (e.g., Notion API call)
-  2. Agent generates cryptographic proof (TLSNotary/API receipt)
-  3. Oracle operator submits + verifies proof on-chain
-  4. Marketplace marks task COMPLETED/FAILED → reputation updated → escrow resolved
-- **Operator management**: `setOracleOperator()` for key rotation without redeployment
+Fileverse integration is fully wired for secure, reference-first workflows.
 
-### 6. ElsaOrchestrator
+### 1) Deliverables (Phase 1 complete)
 
-> Hey Elsa's secure on-chain identity — the Tier 3 Middleware Orchestrator.
+- Job deliverables are uploaded to Fileverse and stored as immutable refs/hashes.
+- Versioned deliverables per job.
+- Poster can finalize one version as the canonical output.
+- Dispute evidence bundle includes deliverable metadata/history.
+- Upload hardening:
+  - MIME allowlist
+  - max file size
+  - filename sanitization
+  - idempotency key support
+  - hash integrity verification
 
-- **Blueprint execution**: translates AI Council decisions into marketplace tasks
-- **Deduplication**: same `blueprintHash` cannot be executed twice
-- **MPC wallet integration**: sequential nonce-based audit trail via `SignedTransaction` events
-- **Budget enforcement**: per-execution cap (configurable, hard ceiling at 10 ETH)
-- **Emergency pause**: `PAUSER_ROLE` can halt all outbound task posting without blocking ongoing completions
-- **Cancel support**: cancel OPEN tasks and reclaim escrowed funds
-- **Preview providers**: `previewProviders()` delegates to marketplace evaluation engine
-- **Fund management**: receives refunds via `receive()`, admin can `withdrawFunds()`
+Main endpoints:
+- `POST /api/jobs/:id/deliver` (multipart upload)
+- `GET /api/jobs/:id/deliverables`
+- `POST /api/jobs/:id/deliverables/:deliverableId/finalize`
+- `GET /api/jobs/:id/dispute/evidence`
 
-### Shared Library — DataTypes
-
-Central type definitions used across all contracts:
-- **Enums**: `AgentCategory` (CRYPTO/WEB2), `TaskStatus`, `EscrowStatus`
-- **Structs**: `Agent`, `Task`, `ReputationData`, `EscrowEntry`, `ProviderScore`, `ExecutionProof`
-
----
+### 2) Council Blueprints in Fileverse (Phase 2 complete)
 
-## Backend (Scaffolded)
+- Strategic blueprint is stored as Markdown artifact in Fileverse.
+- Database stores only metadata and reference fields.
+- Idempotent creation supported.
 
-A Next.js API route at `/api/heyElsa` is scaffolded with:
-- HeyElsa SDK client initialization
-- Placeholder hooks for LLM negotiator and blockchain interaction
-- Returns mock task state for frontend rendering
+Main endpoints:
+- `POST /api/council/blueprints`
+- `GET /api/council/blueprints`
+- `GET /api/council/blueprints/:id`
 
-> **Status**: Scaffolded — not yet connected to the deployed contracts.
+### 3) Job ↔ Blueprint Reference Flow (Phase 3 complete)
 
----
-
-## Project Structure
-
-```
-ShadowPay/
-├── contracts/                   # Hardhat smart contract workspace
-│   ├── contracts/
-│   │   ├── core/
-│   │   │   ├── AgentRegistry.sol
-│   │   │   ├── AgentMarketplace.sol
-│   │   │   ├── ReputationEngine.sol
-│   │   │   └── TaskEscrow.sol
-│   │   ├── orchestrator/
-│   │   │   └── ElsaOrchestrator.sol
-│   │   ├── oracles/
-│   │   │   └── Web2Oracle.sol
-│   │   ├── interfaces/          # Solidity interfaces for all contracts
-│   │   └── libraries/
-│   │       └── DataTypes.sol    # Shared enums, structs, types
-│   ├── test/
-│   │   └── AgentMarketplace.test.ts   # 130 tests covering all contracts
-│   ├── scripts/
-│   │   └── deploy.ts           # Full 6-step deployment with role wiring
-│   ├── hardhat.config.ts
-│   ├── package.json
-│   └── .env.example            # All environment variables documented
-└── backend/                     # Next.js backend (scaffolded)
-    └── src/
-        ├── app/api/heyElsa/route.ts
-        └── services/heyElsaClient.ts
-```
+- Jobs can be created with `blueprintId`.
+- Backend resolves and stores only blueprint reference/hash on job.
+- Blueprint can be attached to existing jobs.
 
----
+Main endpoints:
+- `POST /api/jobs` (optional `blueprintId`)
+- `POST /api/jobs/:id/attach-blueprint`
+- `GET /api/jobs?blueprintId=...`
 
-## Getting Started
+### 4) Blueprint Access Grants (Phase 4 complete)
 
-### Prerequisites
+- Creator-controlled access grants for provider agents.
+- Grant/revoke/list lifecycle implemented.
+- Encrypted key envelope (`encryptedKeyForAgent`) stored per grant.
 
-- Node.js (v18–v22 recommended)
-- npm or yarn
+Main endpoints:
+- `POST /api/blueprints/:id/grant-access`
+- `POST /api/blueprints/:id/revoke-access`
+- `GET /api/blueprints/:id/access`
 
-### Install Dependencies
+### 5) Execution-Time Access Enforcement (Phase 5 complete)
 
-```bash
-cd contracts
-npm install
-```
+- Provider does **not** get raw blueprint by default.
+- Job-scoped blueprint fetch requires:
+  - poster ownership, or
+  - active grant for requesting agent.
+- Revoked grants are immediately denied.
 
-### Compile Contracts
+Main endpoint:
+- `GET /api/jobs/:id/blueprint`
 
-```bash
-npm run compile
-```
+## Quick Run
 
-### Run Tests
+### 1) Install
+- `npm install --prefix backend`
 
-```bash
-npm test
-```
+### 2) Configure env
+Copy `backend/.env.example` to `backend/.env` and fill:
+- `DATABASE_URL`
+- `JWT_SECRET`
+- SIWE vars
+- Fileverse vars
 
-Expected output: **130 passing**
+### 3) Prisma
+- `npm run --prefix backend prisma:generate`
+- `npm run --prefix backend prisma:migrate`
 
-### Deploy (Local)
+### 4) Start backend
+- `npm run --prefix backend dev`
 
-```bash
-# Start a local Hardhat node
-npx hardhat node
+## Validation
 
-# In another terminal
-npm run deploy:local
-```
+### Unit tests
+- `npm run --prefix backend test`
 
-### Deploy (Sepolia Testnet)
+### Build check
+- `npm run --prefix backend build`
 
-1. Copy `.env.example` → `.env` and fill in your values
-2. Run:
-```bash
-npm run deploy:sepolia
-```
+### Smoke test (Phase 6)
+- Docs: `backend/docs/phase6-smoke-test.md`
+- Script: `backend/scripts/phase6-smoke.sh`
+- Run: `npm run --prefix backend smoke:phase6`
 
-The deploy script:
-1. Deploys all 6 contracts in dependency order
-2. Wires all access control roles (`MARKETPLACE_ROLE`, `ELSA_ROLE`, `ORACLE_ROLE`, etc.)
-3. Runs post-deployment verification checks
-4. Saves deployment addresses to `deployments/<network>.json`
-5. Submits contracts for block explorer verification (live networks)
+## Notes
 
----
-
-## Test Coverage
-
-130 tests organized into 7 sections:
-
-| Section | Tests | Description |
-|---------|-------|-------------|
-| §1 AgentRegistry | 16 | Registration, activation, speed updates, access control |
-| §2 ReputationEngine | 12 | EMA scoring, success/failure recording, simulation |
-| §3 TaskEscrow | 10 | Lock/release/refund lifecycle, security guards |
-| §4 AgentMarketplace | 17 | Evaluation engine, task lifecycle, cancellation |
-| §5 Web2Oracle | 13 | Proof submission, verification, rejection |
-| §6 ElsaOrchestrator | 18 | Blueprint execution, deduplication, budget caps, pause |
-| §7 End-to-End | 14 | Full CRYPTO + WEB2 workflows across all contracts |
-
-### Run with Gas Reporting
-
-```bash
-npm run test:gas
-```
-
----
-
-## Environment Variables
-
-See [`.env.example`](contracts/.env.example) for the full list. Key variables:
-
-| Variable | Description |
-|----------|-------------|
-| `DEPLOYER_PRIVATE_KEY` | Deployer/admin wallet private key |
-| `ELSA_SIGNER_ADDRESS` | MPC co-signer for ElsaOrchestrator |
-| `ORACLE_OPERATOR_ADDRESS` | Trusted oracle node address |
-| `SEPOLIA_RPC_URL` | Sepolia testnet RPC endpoint |
-| `ETHERSCAN_API_KEY` | For contract verification |
-| `INITIAL_BUDGET_CAP_WEI` | Per-execution budget cap (default: 0.1 ETH) |
-
----
-
-## Access Control Summary
-
-```
-ElsaOrchestrator
-  ├── ELSA_SIGNER_ROLE    → backend / MPC co-signers
-  └── PAUSER_ROLE         → emergency pause operators
-
-AgentMarketplace
-  ├── ELSA_ROLE           → ElsaOrchestrator (postTask, cancelTask)
-  ├── ORACLE_ROLE         → Web2Oracle (completeTask, failTask for WEB2)
-  └── DEFAULT_ADMIN_ROLE  → deployer multisig
-
-ReputationEngine
-  └── MARKETPLACE_ROLE    → AgentMarketplace
-
-TaskEscrow
-  └── MARKETPLACE_ROLE    → AgentMarketplace
-
-Web2Oracle
-  └── ORACLE_OPERATOR_ROLE → trusted oracle nodes
-
-AgentRegistry
-  └── marketplace (address) → AgentMarketplace (updateSpeed, registerAgentFor)
-```
-
----
-
-## Tech Stack
-
-- **Solidity** ^0.8.20
-- **Hardhat** — development framework
-- **OpenZeppelin** — AccessControl, ReentrancyGuard, Pausable
-- **TypeChain** — TypeScript contract bindings
-- **Ethers.js** v6
-- **Chai** + **Hardhat Chai Matchers** — testing
-- **Next.js** — backend API (scaffolded)
-
----
-
-## License
-
-MIT
+- Smart contract integrations are intentionally not part of this backend scope yet.
+- HeyElsa orchestration logic is intentionally kept separate from this implementation pass.
+- Fileverse is treated as the primary artifact layer; database stores verifiable metadata and references.

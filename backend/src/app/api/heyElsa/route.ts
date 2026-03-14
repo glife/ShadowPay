@@ -1,6 +1,6 @@
 // /backend/src/app/api/heyelsa/route.ts
 import { NextResponse } from 'next/server';
-import { elsaClient } from '@/services/heyelsaClient';
+import { elsaClient } from '@/services/heyElsaClient';
 // import { segregateTasks } from '@/services/llmNegotiator';
 // import { lockEscrow } from '@/services/blockchain';
 
