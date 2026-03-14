@@ -1,0 +1,76 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #050507;
+  --color-eth-primary: #627EEA;
+  --color-reputation-gold: #F3BA2F;
+  --color-security-ruby: #FF4F4F;
+  --color-glass-border: rgba(255, 255, 255, 0.08);
+  --color-glass-bg: rgba(255, 255, 255, 0.03);
+}
+
+:root {
+  --background: var(--color-void);
+  --foreground: #ededed;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Faint Glowing Grid Background */
+body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image: 
+    linear-gradient(to right, rgba(98, 126, 234, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(98, 126, 234, 0.03) 1px, transparent 1px);
+  background-size: 50px 50px; /* Equivalent to a subtle grid */
+  pointer-events: none;
+}
+
+/* Subtle Film Grain / Noise Overlay */
+body::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+}
+
+/* Holographic Text Gradient Utility */
+.text-holographic {
+  background: linear-gradient(to right, #c0c0c0, #e6e6fa, #4b0082);
+  -webkit-background-clip: text;
+  color: transparent;
+  background-clip: text;
+}
+
+/* Holographic Border/Background Gradient Utility */
+.bg-holographic {
+  background: linear-gradient(45deg, #c0c0c0, #e6e6fa, #4b0082);
+}
+
+/* Standard Cypherpunk Frosted Glass */
+.glass-panel {
+  background: var(--color-glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--color-glass-border);
+}
+
+/* Hide scrollbar completely but allow scrolling */
+.custom-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.custom-scrollbar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari and Opera */
+}
