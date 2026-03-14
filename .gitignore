@@ -1,4 +1,43 @@
-backend/node_modules/
-backend/package-lock.json
-backend/package.json
+# Dependencies
+node_modules/
+
+# Environment variables
 .env
+.env.local
+.env.*.local
+
+# Lock files (optional — remove these lines if you want to track them)
+package-lock.json
+
+# Hardhat files
+contracts/cache/
+contracts/artifacts/
+
+# TypeChain files
+contracts/typechain-types/
+
+# Solidity coverage
+contracts/coverage/
+contracts/coverage.json
+
+# Hardhat Ignition local deployments
+contracts/ignition/deployments/chain-31337
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+npm-debug.log*
+
+# Build output
+dist/
+build/
